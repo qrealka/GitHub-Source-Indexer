@@ -26,9 +26,6 @@
 .PARAMETER ignoreUnknown
   By default this script terminates when it encounters source from a path other than the source root.
   Pass this switch to instead ignore all paths other than the source root.
-.PARAMETER serverIsRaw
-  If the server serves raw the /raw directory name should not be concatenated to the source urls.
-  Pass this switch to omit the /raw directory, e.g. -gitHubUrl https://raw.github.com -serverIsRaw
 .PARAMETER verifyLocalRepo
   This switch verifies the local repository from the detected or passed in 'sourcesRoot' by using 
   git to get the filenames from the tree associated with 'branch' (which is either a branch or 
@@ -38,9 +35,10 @@
   This is an important switch and is recommended because PDBs don't often store case sensitivity 
   for files while github servers expect case sensitivity for the files that are requested. Use of 
   this switch implies switch ignoreUnknown.
-
+.PARAMETER gitPath
+  Path to the git.exe
 .EXAMPLE 
-  .\github-sourceindexer.ps1 -symbolsFolder "C:\git\DirectoryContainingPdbFilesToIndex" -userId "GithubUsername" -repository "GithubRepositoryName" -branch "master" -sourcesRoot "c:\git\OriginalCompiledProjectPath" -verbose
+  .\index.ps1 -symbolsFolder "C:\git\DirectoryContainingPdbFilesToIndex" -userId "GithubUsername" -repository "GithubRepositoryName" -branch "master" -sourcesRoot "c:\git\OriginalCompiledProjectPath" -verbose
   
   Description
   -----------
@@ -84,11 +82,12 @@ param(
        ## Ignore paths other than the source root
        [switch] $ignoreUnknown,
        
-       ## Server serves raw: don't concatenate /raw in the path
-       [switch] $serverIsRaw,
-       
        ## Verify the filenames in the tree in the local repository
-       [switch] $verifyLocalRepo
+       [switch] $verifyLocalRepo,
+
+       ## Full path to git.exe
+       [Alias("git")]
+       [string] $gitPath
        )
        
 
@@ -169,6 +168,10 @@ function CheckDebuggingToolsPath {
 ###############################################################
 
 function FindGitExe {
+    if (![String]::IsNullOrEmpty($gitPath)) {
+        return $gitPath
+    }
+  
     $suffix = "\git\bin\git.exe"
     
     $gitexe = ${env:ProgramFiles} + $suffix
@@ -212,7 +215,7 @@ function WriteStreamVariables {
   Add-Content -value "SRCSRV: variables ------------------------------------------" -path $streamPath
   Add-Content -value "SRCSRVVERCTRL=http" -path $streamPath
   Add-Content -value "HTTP_ALIAS=$gitHubUrl" -path $streamPath
-  Add-Content -value "HTTP_EXTRACT_TARGET=%HTTP_ALIAS%/%var2%/%var3%$raw/%var4%/%var5%" -path $streamPath
+  Add-Content -value "HTTP_EXTRACT_TARGET=%HTTP_ALIAS%/%var2%/%var3%/var4%/%var5%" -path $streamPath
   Add-Content -value "SRCSRVTRG=%http_extract_target%" -path $streamPath
   Add-Content -value "SRCSRVCMD=" -path $streamPath
 }
@@ -265,7 +268,6 @@ function WriteStreamSources {
     if (!$gitexe) {
       throw "Script error. git.exe not found";
     }
-    
     $gitrepo = $sourcesRoot + ".git"
     if (!(Test-Path $gitrepo)) {
       throw "Script error. git repo not found: $gitrepo";
@@ -322,28 +324,23 @@ function WriteStreamSources {
       $filepath = $srcStrip
     }
     
-    #Add-Content -value "HTTP_ALIAS=http://github.com/%var2%/%var3%$raw/%var4%/%var5%" -path $streamPath
+    #Add-Content -value "HTTP_ALIAS=https://raw.githubusercontent.com/%var2%/%var3%/%var4%/%var5%" -path $streamPath
     Add-Content -value "$src*$userId*$repository*$branch*$filepath" -path $streamPath
-    Write-Verbose "Indexing source to $gitHubUrl/$userId/$repository$raw/$branch/$filepath"
+    Write-Verbose "Indexing source to $gitHubUrl/$userId/$repository/$branch/$filepath"
   }
 }
 
 ###############################################################
 # START
 ###############################################################
+echo $gitPath
+
 if ($verifyLocalRepo) {
   $ignoreUnknown = $TRUE
 }
 
 if ([String]::IsNullOrEmpty($gitHubUrl)) {
-    $gitHubUrl = "http://github.com";
-}
-
-# If the server serves raw then /raw does not need to be concatenated
-if ($serverIsRaw) {
-  $raw = "";
-} else {
-  $raw = "/raw";
+    $gitHubUrl = "https://raw.githubusercontent.com";
 }
 
 # Check the debugging tools path
