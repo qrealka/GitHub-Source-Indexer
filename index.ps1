@@ -11,8 +11,8 @@
   The github user ID.
 .PARAMETER repository
   The github repository name containing the matching source files.
-.PARAMETER branch
-  The github branch name, the version of the files in the branch must match the source versions the pdb file was created with.
+.PARAMETER commit
+  The github commit SHA1, the version of the files in the commit must match the source versions the pdb file was created with.
 .PARAMETER sourcesRoot
   The root of the source folder - i.e the beginning of the original file paths to be stripped out (obtained using "srctool -r Library.pdb"). 
   Will default to the longest common file path if not provided. The remainder will be appended to the appropriate Github url for source retrieval. 
@@ -28,7 +28,7 @@
   Pass this switch to instead ignore all paths other than the source root.
 .PARAMETER verifyLocalRepo
   This switch verifies the local repository from the detected or passed in 'sourcesRoot' by using 
-  git to get the filenames from the tree associated with 'branch' (which is either a branch or 
+  git to get the filenames from the tree associated with 'commit' (which is either a branch or 
   commit). Any filename from the PDB that is found in the tree list, and that is not excluded by 
   other options, will have its source server information added in the same case that it is seen in 
   the tree list. Other filenames from the PDB that are not found in the tree list will be ignored. 
@@ -38,7 +38,7 @@
 .PARAMETER gitPath
   Path to the git.exe
 .EXAMPLE 
-  .\index.ps1 -symbolsFolder "C:\git\DirectoryContainingPdbFilesToIndex" -userId "GithubUsername" -repository "GithubRepositoryName" -branch "master" -sourcesRoot "c:\git\OriginalCompiledProjectPath" -verbose
+  .\index.ps1 -symbolsFolder "C:\git\DirectoryContainingPdbFilesToIndex" -userId "GithubUsername" -repository "GithubRepositoryName" -commit "master" -sourcesRoot "c:\git\OriginalCompiledProjectPath" -verbose
   
   Description
   -----------
@@ -63,9 +63,8 @@ param(
        [Parameter(Mandatory = $true)]
        [string] $repository,
        
-       ## github branch name
-       [Parameter(Mandatory = $true)]
-       [string] $branch,
+       ## github commit sha
+       [string] $commit,
        
        ## A root path for the source files
        [string] $sourcesRoot,
@@ -273,9 +272,16 @@ function WriteStreamSources {
       throw "Script error. git repo not found: $gitrepo";
     }
     
-    $lstree = & "$gitexe" "--git-dir=$gitrepo" ls-tree --name-only --full-tree -r "$branch"
+    if ([String]::IsNullOrEmpty($commit)) {
+        $commit = & "$gitexe" "--git-dir=$gitrepo" rev-parse HEAD;
+        if ($LASTEXITCODE) {
+          throw "Script error. git could not get the hash of the current commit";
+        }
+    }
+    
+    $lstree = & "$gitexe" "--git-dir=$gitrepo" ls-tree --name-only --full-tree -r "$commit"
     if ($LASTEXITCODE) {
-      throw "Script error. git could not list the files from commit/branch: $branch";
+      throw "Script error. git could not list the files from commit/branch: $commit";
     }
   }
   
@@ -325,15 +331,15 @@ function WriteStreamSources {
     }
     
     #Add-Content -value "HTTP_ALIAS=https://raw.githubusercontent.com/%var2%/%var3%/%var4%/%var5%" -path $streamPath
-    Add-Content -value "$src*$userId*$repository*$branch*$filepath" -path $streamPath
-    Write-Verbose "Indexing source to $gitHubUrl/$userId/$repository/$branch/$filepath"
+    Add-Content -value "$src*$userId*$repository*$commit*$filepath" -path $streamPath
+    Write-Verbose "Indexing source to $gitHubUrl/$userId/$repository/$commit/$filepath"
   }
 }
 
 ###############################################################
 # START
 ###############################################################
-echo $gitPath
+Write-Output $gitPath
 
 if ($verifyLocalRepo) {
   $ignoreUnknown = $TRUE
