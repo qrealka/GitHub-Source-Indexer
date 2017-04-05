@@ -284,6 +284,11 @@ function WriteStreamSources {
       throw "Script error. git could not list the files from commit/branch: $commit";
     }
   }
+  else {
+    if ([String]::IsNullOrEmpty($commit)) {
+        $commit = "master";
+    }
+  }
   
   #other source files
   foreach ($src in $sources) {
@@ -299,7 +304,7 @@ function WriteStreamSources {
     if ($skip) {
       continue;
     }
-    
+
     if (!$src.StartsWith($sourcesRoot, [System.StringComparison]::CurrentCultureIgnoreCase)) {
       if ($ignoreUnknown) {
         continue;
