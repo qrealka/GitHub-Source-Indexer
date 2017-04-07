@@ -248,7 +248,10 @@ function WriteStreamSources {
   $outputFileName = [System.IO.Path]::GetFileNameWithoutExtension($sourceArchivePath)
   #other source files
   foreach ($src in $sources) {
-    
+    if ($src -eq $sources[-1]) {
+      continue;
+    }
+
     if (($src.IndexOf("windows kits", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
       continue;
     }
@@ -274,6 +277,15 @@ function WriteStreamSources {
       }
     }
     if ($skip) {
+      continue;
+    }
+
+    $srcFileName = Split-Path $src -leaf
+    if (($srcFileName.IndexOf(".pch", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+      continue;
+    }
+
+    if (($srcFileName.IndexOf(".tmp", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
       continue;
     }
 
@@ -368,11 +380,11 @@ if ([String]::IsNullOrEmpty($gitHubUrl)) {
 
 # Check the debugging tools path
 $dbgToolsPath = CheckDebuggingToolsPath $dbgToolsPath
+# lstree
 
 $pdbs = Get-ChildItem $symbolsFolder -Filter *.pdb -Recurse
-
 #workflow updatePdb {
-#}
+#  param()
 foreach ($pdb in $pdbs) {
   Write-Verbose "Indexing $($pdb.FullName) ..."
 
@@ -392,9 +404,13 @@ foreach ($pdb in $pdbs) {
       # Save stream to the pdb file
       $pdbstrPath = "{0}pdbstr.exe" -f $dbgToolsPath
       $pdbFullName = $pdb.FullName
+
+      Write-Verbose "Saving the generated stream into the PDB file..."
+      . $pdbstrPath -w -s:srcsrv "-p:$pdbFullName" "-i:$streamContent"
+      Write-Verbose "Done."      
     }
-    
   } finally {
     Remove-Item $streamContent
   }
 }
+#}
