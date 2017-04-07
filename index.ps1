@@ -144,21 +144,21 @@ function CheckDebuggingToolsPath {
     # Let's try to execute the srctool and check the error
     if ($(Get-Command "srctool.exe" 2>$null) -eq $null) {
       # srctool.exe can't be found - let's try cdb
-      $cdbg = Get-Command "cdb.exe" 2>$null
+      $cdbg = Get-Command "symstore.exe" | Select-Object -ExpandProperty Definition
       if ($cdbg -eq $null) {
         $errormsg = "The Debugging Tools for Windows could not be found. Please make sure " + `
                     "that they are installed and reference them using -dbgToolsPath switch."
         throw $errormsg        
       }
       # cdbg found srctool.exe should be then in the srcsrv subdirectory
-      $dbgToolsPath = $([System.IO.Path]::GetDirectoryName($dbg.Defintion)) + "\srcsrv\"
+      $dbgToolsPath = $([System.IO.Path]::GetDirectoryName($cdbg)) + "\srcsrv\"
       if (![System.IO.File]::Exists($dbgToolsPath + "srctool.exe")) {
         $errormsg = "The Debugging Tools for Windows could not be found. Please make sure " + `
                     "that they are installed and reference them using -dbgToolsPath switch."
         throw $errormsg
       }
       # OK, we are fine - the srctool exists
-      Write-Verbose "The Debugging Tools For Windows found at $dbgToolsPath."
+      Write-Host "The Debugging Tools For Windows found at $dbgToolsPath."
     }
   }
   return $dbgToolsPath
@@ -171,6 +171,11 @@ function FindGitExe {
         return $gitPath
     }
   
+    $gitPath = Get-Command git.exe| Select-Object -ExpandProperty Definition  
+    if (![String]::IsNullOrEmpty($gitPath)) {
+        return $gitPath
+    }
+
     $suffix = "\git\bin\git.exe"
     
     $gitexe = ${env:ProgramFiles} + $suffix
