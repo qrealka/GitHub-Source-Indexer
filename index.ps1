@@ -228,7 +228,8 @@ function WriteStreamVariables {
 
 function WriteStreamSources {
   param([string] $streamPath,
-        [string] $pdbPath)
+        [string] $pdbPath,
+        [Object[]] $lstree)
         
   Write-Verbose "Preparing stream source files section..."
 
@@ -240,71 +241,11 @@ function WriteStreamSources {
   }
 
   Add-Content -value "SRCSRV: source files ---------------------------------------" -path $streamPath
-  $gitrepo=""
-  if ([String]::IsNullOrEmpty($sourcesRoot)) {
-    $gitrepo = (get-item $PSScriptRoot ).FullName + "/.git"
-    if (Test-Path $gitrepo) {
-       $sourcesRoot = (get-item $PSScriptRoot ).FullName
-    } else {
-       $sourcesRoot = (get-item $PSScriptRoot ).parent.FullName
-    }
-    write-warning "Sources root not provided, assuming: '$sourcesRoot'";
-  }
 
   if ([String]::IsNullOrEmpty($sourcesRoot)) {
-    # That's a little bit hard - we need to guess the source root.
-    # By default we compare all source paths stored in the PDB file
-    # and extract the least common path, eg. for paths:
-    # C:\test\test1\test2\src\Program.cs
-    # C:\test\test1\test2\src\Test.Domain\Domain.cs
-    # we will assume that the source code archive was created from
-    # the C:\test\test1\test2\src\ path - so be careful here!
-      
-    $sourcesRoot = $null
-    foreach ($src in $sources) {
-      if ($sourcesRoot -eq $null) {
-        $sourcesRoot = [System.IO.Path]::GetDirectoryName($src)
-        continue
-      }
-      $sourcesRoot = FindLongestCommonPath $src $sourcesRoot
-    }  
-    $warning = "Sources root not provided, assuming: '$sourcesRoot'. If it's not correct please run the script " + `
-               "with correct value set for -sourcesRoot parameter."
-    Write-Warning $warning
+    throw "Sources root not provided"
   }
-  $sourcesRoot = CorrectPathBackslash $sourcesRoot
   $outputFileName = [System.IO.Path]::GetFileNameWithoutExtension($sourceArchivePath)
-  
-  #if we're verifying the local repo then get the tree list from the branch/commit
-  $lstree = ""
-  if ($verifyLocalRepo) {
-    $gitexe = FindGitExe
-    if (!$gitexe) {
-      throw "Script error. git.exe not found";
-    }
-    $gitrepo = $sourcesRoot + ".git"
-    if (!(Test-Path $gitrepo)) {
-      throw "Script error. git repo not found: $gitrepo";
-    }
-    
-    if ([String]::IsNullOrEmpty($commit)) {
-        $commit = & "$gitexe" "--git-dir=$gitrepo" rev-parse HEAD;
-        if ($LASTEXITCODE) {
-          throw "Script error. git could not get the hash of the current commit";
-        }
-    }
-    
-    $lstree = & "$gitexe" "--git-dir=$gitrepo" ls-tree --name-only --full-tree -r "$commit"
-    if ($LASTEXITCODE) {
-      throw "Script error. git could not list the files from commit/branch: $commit";
-    }
-  }
-  else {
-    if ([String]::IsNullOrEmpty($commit)) {
-        $commit = "master";
-    }
-  }
-  
   #other source files
   foreach ($src in $sources) {
     
@@ -366,8 +307,43 @@ function WriteStreamSources {
 #}
 #write-host $Script:args
 
+$gitrepo=""
+if ([String]::IsNullOrEmpty($sourcesRoot)) {
+  $gitrepo = (get-item $PSScriptRoot ).FullName + "/.git"
+  if (Test-Path $gitrepo) {
+      $sourcesRoot = (get-item $PSScriptRoot ).FullName
+  } else {
+      $sourcesRoot = (get-item $PSScriptRoot ).parent.FullName
+  }
+  write-warning "Sources root not provided, assuming: '$sourcesRoot'";
+}
+
+$gitexe = FindGitExe
+if (!$gitexe) {
+  throw "Script error. git.exe not found";
+}
+
+$sourcesRoot = CorrectPathBackslash $sourcesRoot
+$gitrepo = $sourcesRoot + ".git";
+
+if ([String]::IsNullOrEmpty($commit)) {
+    $commit = & "$gitexe" "--git-dir=$gitrepo" rev-parse HEAD;
+    if ($LASTEXITCODE) {
+      throw "Script error. git could not get the hash of the current commit";
+    }
+}
+
 if ($verifyLocalRepo) {
-  $ignoreUnknown = $TRUE
+    $ignoreUnknown = $TRUE
+
+    if (!(Test-Path $gitrepo)) {
+      throw "Script error. git repo not found: $gitrepo";
+    }
+    
+    $lstree = & "$gitexe" "--git-dir=$gitrepo" ls-tree --name-only --full-tree -r "$commit"
+    if ($LASTEXITCODE) {
+      throw "Script error. git could not list the files from commit/branch: $commit";
+    }
 }
 
 if ([String]::IsNullOrEmpty($gitHubUrl)) {
@@ -378,6 +354,9 @@ if ([String]::IsNullOrEmpty($gitHubUrl)) {
 $dbgToolsPath = CheckDebuggingToolsPath $dbgToolsPath
 
 $pdbs = Get-ChildItem $symbolsFolder -Filter *.pdb -Recurse
+
+#workflow updatePdb {
+#}
 foreach ($pdb in $pdbs) {
   Write-Verbose "Indexing $($pdb.FullName) ..."
 
@@ -387,23 +366,16 @@ foreach ($pdb in $pdbs) {
     # fill the PDB stream file
     WriteStreamHeader $streamContent
     WriteStreamVariables $streamContent
-    $success = WriteStreamSources $streamContent $pdb.FullName
-    if($success -eq "failed") {
-        continue
+    $success = WriteStreamSources $streamContent $pdb.FullName $lstree
+    
+    if($success -ne "failed") {
+      Add-Content -value "SRCSRV: end ------------------------------------------------" -path $streamContent
+      
+      # Save stream to the pdb file
+      $pdbstrPath = "{0}pdbstr.exe" -f $dbgToolsPath
+      $pdbFullName = $pdb.FullName
     }
     
-    Add-Content -value "SRCSRV: end ------------------------------------------------" -path $streamContent
-    
-    # Save stream to the pdb file
-    $pdbstrPath = "{0}pdbstr.exe" -f $dbgToolsPath
-    $pdbFullName = $pdb.FullName
-    # write stream info to the pdb file
-      
-    Write-Verbose "Saving the generated stream into the PDB file..."
-    . $pdbstrPath -w -s:srcsrv "-p:$pdbFullName" "-i:$streamContent"
-    
-    
-    Write-Verbose "Done."
   } finally {
     Remove-Item $streamContent
   }
