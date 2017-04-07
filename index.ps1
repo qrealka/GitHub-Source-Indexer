@@ -249,6 +249,22 @@ function WriteStreamSources {
   #other source files
   foreach ($src in $sources) {
     
+    if (($src.IndexOf("windows kits", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+      continue;
+    }
+
+    if (($src.IndexOf("microsoft visual studio", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+      continue;
+    }
+
+    if (($src.IndexOf("f:\dd\", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+      continue;
+    }
+    
+    if (($src.IndexOf("f:\binaries.", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+      continue;
+    }
+    
     #if the source path $src contains a string in the $ignore array, skip it
     [bool] $skip = $false;
     foreach ($istr in $ignore) {
