@@ -316,12 +316,12 @@ function WriteStreamSources {
 ###############################################################
 # START
 ###############################################################
-#$Script:args=""
-#write-host "Num Args: " $PSBoundParameters.Keys.Count
-#foreach ($key in $PSBoundParameters.keys) {
-#    $Script:args+= "`$$key=" + $PSBoundParameters["$key"] + "  "
-#}
-#write-host $Script:args
+$Script:args=""
+write-host "Num Args: " $PSBoundParameters.Keys.Count
+foreach ($key in $PSBoundParameters.keys) {
+    $Script:args+= "`$$key=" + $PSBoundParameters["$key"] + "  "
+}
+write-host $Script:args
 
 $gitrepo=""
 if ([String]::IsNullOrEmpty($sourcesRoot)) {
@@ -384,7 +384,9 @@ foreach ($pdb in $pdbs) {
     WriteStreamVariables $streamContent
     $success = WriteStreamSources $streamContent $pdb.FullName $lstree
     
-    if($success -ne "failed") {
+    if($success -ieq "failed") {
+      Write-Host "Ignored $($pdb.FullName)"
+    } else {
       Add-Content -value "SRCSRV: end ------------------------------------------------" -path $streamContent
       
       # Save stream to the pdb file
