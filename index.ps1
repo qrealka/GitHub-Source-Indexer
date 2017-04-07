@@ -1,4 +1,4 @@
-#requires -version 2
+#requires -version 3
 
 <#
 .DESCRIPTION
@@ -240,7 +240,17 @@ function WriteStreamSources {
   }
 
   Add-Content -value "SRCSRV: source files ---------------------------------------" -path $streamPath
-  
+  $gitrepo=""
+  if ([String]::IsNullOrEmpty($sourcesRoot)) {
+    $gitrepo = (get-item $PSScriptRoot ).FullName + "/.git"
+    if (Test-Path $gitrepo) {
+       $sourcesRoot = (get-item $PSScriptRoot ).FullName
+    } else {
+       $sourcesRoot = (get-item $PSScriptRoot ).parent.FullName
+    }
+    write-warning "Sources root not provided, assuming: '$sourcesRoot'";
+  }
+
   if ([String]::IsNullOrEmpty($sourcesRoot)) {
     # That's a little bit hard - we need to guess the source root.
     # By default we compare all source paths stored in the PDB file

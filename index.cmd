@@ -1,1 +1,1 @@
-@powershell.exe -ExecutionPolicy UNRESTRICTED -File %~dp1index.ps1 -verifyLocalRepo %*
+@powershell.exe -ExecutionPolicy UNRESTRICTED -File %~dp1index.ps1 %*
